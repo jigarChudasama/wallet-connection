@@ -1,24 +1,56 @@
 import { NETWORK_TYPE } from '../utils/constant';
-import { mainnet, sepolia, bsc, bscTestnet, polygon, polygonAmoy } from '@reown/appkit/networks';
+
+import {
+    // Mainnets
+    mainnet,
+    bsc,
+    polygon,
+    arbitrum,
+    optimism,
+    avalanche,
+    base,
+
+    // Testnets
+    sepolia,
+    bscTestnet,
+    polygonAmoy,
+    arbitrumSepolia,
+    optimismSepolia,
+    avalancheFuji,
+    baseSepolia
+} from '@reown/appkit/networks';
 
 export const chainTypes = {
-    BNB: 'BNB',
     ETH: 'ETH',
-    POLYGON: 'POLYGON'
+    BNB: 'BNB',
+    POLYGON: 'POLYGON',
+    ARBITRUM: 'ARBITRUM',
+    OPTIMISM: 'OPTIMISM',
+    AVALANCHE: 'AVALANCHE',
+    BASE: 'BASE'
 };
 
 export const chains = NETWORK_TYPE === 'mainnet' ?
     {
-        [chainTypes.BNB]: bsc,
         [chainTypes.ETH]: mainnet,
-        [chainTypes.POLYGON]: polygon
+        [chainTypes.BNB]: bsc,
+        [chainTypes.POLYGON]: polygon,
+        [chainTypes.ARBITRUM]: arbitrum,
+        [chainTypes.OPTIMISM]: optimism,
+        [chainTypes.AVALANCHE]: avalanche,
+        [chainTypes.BASE]: base
     }
     :
+    // ================= TESTNET (Fake Money) =================
     {
-        [chainTypes.BNB]: bscTestnet,
         [chainTypes.ETH]: sepolia,
-        [chainTypes.POLYGON]: polygonAmoy
+        [chainTypes.BNB]: bscTestnet,
+        [chainTypes.POLYGON]: polygonAmoy,
+        [chainTypes.ARBITRUM]: arbitrumSepolia,
+        [chainTypes.OPTIMISM]: optimismSepolia,
+        [chainTypes.AVALANCHE]: avalancheFuji,
+        [chainTypes.BASE]: baseSepolia
     };
 
-// Convert object to an array for AppKit
+// 4. Export the list for AppKit
 export const chainList = Object.values(chains);

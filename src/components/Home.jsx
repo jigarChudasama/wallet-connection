@@ -1,16 +1,17 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   useAccount,
   useDisconnect,
   useBalance,
-  useBlockNumber,
   useSwitchChain,
   useReadContract,
   useSendTransaction,
   useWaitForTransactionReceipt,
+  useWriteContract,
 } from "wagmi";
-import { parseEther, formatEther } from "viem";
+import { parseEther, parseUnits, formatUnits } from "viem";
 
+/* ---------------- ERC20 ABI ---------------- */
 const ERC20_ABI = [
   {
     constant: true,
@@ -19,179 +20,250 @@ const ERC20_ABI = [
     outputs: [{ name: "balance", type: "uint256" }],
     type: "function",
   },
+  {
+    constant: false,
+    inputs: [
+      { name: "_to", type: "address" },
+      { name: "_value", type: "uint256" },
+    ],
+    name: "transfer",
+    outputs: [{ name: "", type: "bool" }],
+    type: "function",
+  },
 ];
 
-const USDT_ADDRESS = "0xdAC17F958D2ee523a2206206994597C13D831ec7";
+/* ---------------- Token Config ---------------- */
+const TOKEN_LISTS = {
+  1: [
+    { symbol: "ETH", name: "Ethereum", isNative: true, decimals: 18 },
+    {
+      symbol: "USDT",
+      name: "Tether USD",
+      address: "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+      decimals: 6,
+    },
+    {
+      symbol: "USDC",
+      name: "USD Coin",
+      address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      decimals: 6,
+    },
+  ],
+  11155111: [
+    { symbol: "SepoliaETH", name: "Sepolia Ether", isNative: true, decimals: 18 },
+    {
+      symbol: "USDC",
+      name: "USDC Test",
+      address: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
+      decimals: 6,
+    },
+  ],
+  56: [
+    { symbol: "BNB", name: "Binance Coin", isNative: true, decimals: 18 },
+    {
+      symbol: "USDT",
+      name: "Tether USD",
+      address: "0x55d398326f99059fF775485246999027B3197955",
+      decimals: 18,
+    },
+  ],
+};
 
 export default function Home() {
   const { address, isConnected, chain } = useAccount();
   const { disconnect } = useDisconnect();
   const { switchChain, chains } = useSwitchChain();
-  const { data: blockNumber } = useBlockNumber({ watch: true });
-  const { data: ethBalance } = useBalance({ address });
 
-  const { data: usdtBalance, isLoading } = useReadContract({
-    address: USDT_ADDRESS,
+  const [selectedToken, setSelectedToken] = useState(null);
+  const [amount, setAmount] = useState("0.001");
+  const [recipient, setRecipient] = useState(
+    "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"
+  );
+
+  const currentTokens = TOKEN_LISTS[chain?.id] || [];
+
+  useEffect(() => {
+    if (currentTokens.length) setSelectedToken(currentTokens[0]);
+  }, [chain?.id]);
+
+  /* ---------------- Balances ---------------- */
+  const { data: nativeBalance } = useBalance({
+    address,
+    query: { enabled: isConnected && selectedToken?.isNative },
+  });
+
+  const { data: tokenBalance, isLoading: isTokenLoading } = useReadContract({
+    address: selectedToken?.address,
     abi: ERC20_ABI,
     functionName: "balanceOf",
     args: [address],
-    query: { enabled: isConnected },
+    query: { enabled: isConnected && !selectedToken?.isNative },
   });
 
-  const { sendTransaction, data: txHash, isPending } =
-    useSendTransaction();
+  const displayBalance = selectedToken?.isNative
+    ? nativeBalance?.formatted
+    : tokenBalance
+    ? formatUnits(tokenBalance, selectedToken.decimals)
+    : "0";
 
+  /* ---------------- Transactions ---------------- */
+  const { sendTransaction, data: ethTxHash, isPending: isEthPending } =
+    useSendTransaction();
+  const {
+    writeContract,
+    data: tokenTxHash,
+    isPending: isTokenPending,
+  } = useWriteContract();
+
+  const txHash = ethTxHash || tokenTxHash;
+  const isPending = isEthPending || isTokenPending;
   const { isLoading: isConfirming, isSuccess } =
     useWaitForTransactionReceipt({ hash: txHash });
 
-  const [amount, setAmount] = useState("0.001");
+  const handleSend = () => {
+    if (!selectedToken || !amount) return;
 
-  const handleSendEth = () => {
-    sendTransaction({
-      to: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045", //Vitalik Buterin' address 
-      value: parseEther(amount),
-    });
+    if (selectedToken.isNative) {
+      sendTransaction({
+        to: recipient,
+        value: parseEther(amount),
+      });
+    } else {
+      writeContract({
+        address: selectedToken.address,
+        abi: ERC20_ABI,
+        functionName: "transfer",
+        args: [recipient, parseUnits(amount, selectedToken.decimals)],
+      });
+    }
   };
 
-  /* ---------- DISCONNECTED ---------- */
+  /* ---------------- UI ---------------- */
   if (!isConnected) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-950 text-white">
-        <h2 className="text-3xl font-bold mb-3">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
+        <h2 className="text-3xl font-bold text-gray-900 mb-2">
           Crypto Dashboard
         </h2>
-        <p className="text-slate-400 mb-6">
-          Please connect your wallet to continue
+        <p className="text-gray-500 mb-6">
+          Connect your wallet to continue
         </p>
         <appkit-button />
       </div>
     );
   }
 
-  /* ---------- CONNECTED ---------- */
   return (
-    <div className="min-h-screen bg-slate-950 text-white py-10">
+    <div className="min-h-screen bg-gray-50 py-10">
       <div className="max-w-3xl mx-auto space-y-6 px-4">
-
-        {/* Wallet Info */}
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
-          <div className="flex justify-between items-center mb-3">
-            <h3 className="text-lg font-semibold">👤 My Wallet</h3>
+        {/* Configuration */}
+        <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-xl font-semibold text-gray-900">
+              ⚙️ Configuration
+            </h3>
             <button
               onClick={disconnect}
-              className="px-3 py-1 text-sm rounded-md bg-red-500 hover:bg-red-600"
+              className="px-3 py-1.5 text-xs font-semibold text-red-600 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100"
             >
               Disconnect
             </button>
           </div>
 
-          <p className="text-sm text-slate-400 break-all">
-            <span className="text-white font-medium">Address:</span>{" "}
-            {address}
-          </p>
-
-          <p className="mt-2 text-sm">
-            <span className="text-slate-400">ETH Balance:</span>{" "}
-            {ethBalance?.formatted} {ethBalance?.symbol}
-          </p>
-        </div>
-
-        {/* Network Info */}
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
-          <h3 className="text-lg font-semibold mb-3">
-            🌐 Network Status
-          </h3>
-
-          <p className="text-sm">
-            <span className="text-slate-400">Chain:</span>{" "}
-            {chain?.name} (ID {chain?.id})
-          </p>
-
-          <p className="text-sm mt-1">
-            <span className="text-slate-400">Block:</span>{" "}
-            <span className="text-green-400">
-              #{blockNumber?.toString()}
-            </span>
-          </p>
-
-          <div className="flex flex-wrap gap-2 mt-4">
+          <p className="text-xs text-gray-500 font-semibold mb-2">NETWORK</p>
+          <div className="flex flex-wrap gap-2 mb-6">
             {chains.map((c) => (
               <button
                 key={c.id}
                 disabled={chain?.id === c.id}
                 onClick={() => switchChain({ chainId: c.id })}
-                className={`px-3 py-1 rounded-md text-sm border
+                className={`px-4 py-2 rounded-xl text-sm border transition
                   ${
                     chain?.id === c.id
-                      ? "bg-slate-800 text-slate-500 border-slate-700"
-                      : "bg-slate-800 hover:bg-slate-700 border-slate-600"
+                      ? "bg-blue-600 text-white border-blue-600"
+                      : "bg-white border-gray-300 text-gray-600 hover:bg-gray-100"
                   }`}
               >
                 {c.name}
               </button>
             ))}
           </div>
+
+          <p className="text-xs text-gray-500 font-semibold mb-2">TOKEN</p>
+          <select
+            className="w-full bg-white border border-gray-300 rounded-xl p-3"
+            value={selectedToken?.symbol}
+            onChange={(e) =>
+              setSelectedToken(
+                currentTokens.find((t) => t.symbol === e.target.value)
+              )
+            }
+          >
+            {currentTokens.map((t) => (
+              <option key={t.symbol} value={t.symbol}>
+                {t.symbol} - {t.name}
+              </option>
+            ))}
+          </select>
         </div>
 
-        {/* Read Contract */}
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
-          <h3 className="text-lg font-semibold mb-3">
-            📖 USDT Balance
-          </h3>
-
-          {isLoading ? (
-            <p className="text-slate-400">Loading...</p>
-          ) : (
-            <p>
-              <span className="text-slate-400">Balance:</span>{" "}
-              {usdtBalance ? formatEther(usdtBalance) : "0"} USDT
-            </p>
-          )}
-        </div>
-
-        {/* Send ETH */}
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
-          <h3 className="text-lg font-semibold mb-3">
-            💸 Send ETH
-          </h3>
-
-          <div className="flex gap-3">
-            <input
-              type="number"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              className="flex-1 px-3 py-2 rounded-md bg-slate-800 border border-slate-700 outline-none"
-            />
-
-            <button
-              onClick={handleSendEth}
-              disabled={isPending || isConfirming}
-              className="px-4 py-2 rounded-md bg-blue-500 hover:bg-blue-600 disabled:opacity-50"
-            >
-              {isPending
-                ? "Confirm Wallet"
-                : isConfirming
-                ? "Processing..."
-                : "Send"}
-            </button>
+        {/* Balance */}
+        <div className="bg-white border border-gray-200 rounded-3xl p-10 text-center shadow">
+          <p className="text-gray-500 mb-2">Available Balance</p>
+          <h2 className="text-5xl font-extrabold text-gray-900">
+            {isTokenLoading ? "..." : displayBalance}
+            <span className="text-blue-600 text-2xl ml-2">
+              {selectedToken?.symbol}
+            </span>
+          </h2>
+          <div className="mt-4 inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-gray-100 text-xs text-gray-600">
+            <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+            {address.slice(0, 6)}...{address.slice(-4)}
           </div>
+        </div>
+
+        {/* Send */}
+        <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
+          <h3 className="text-xl font-semibold mb-4">
+            💸 Send {selectedToken?.symbol}
+          </h3>
+
+          <input
+            className="w-full mb-3 px-4 py-3 border rounded-xl"
+            value={recipient}
+            onChange={(e) => setRecipient(e.target.value)}
+          />
+
+          <input
+            type="number"
+            className="w-full mb-4 px-4 py-3 border rounded-xl"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+          />
+
+          <button
+            onClick={handleSend}
+            disabled={isPending || isConfirming}
+            className={`w-full py-4 rounded-xl font-semibold text-lg
+              ${
+                isPending || isConfirming
+                  ? "bg-gray-300 text-gray-500"
+                  : "bg-blue-600 hover:bg-blue-500 text-white"
+              }`}
+          >
+            {isPending
+              ? "Confirm in Wallet..."
+              : isConfirming
+              ? "Processing..."
+              : "Send"}
+          </button>
 
           {txHash && (
-            <div className="mt-4 text-sm break-all">
-              <p className="text-slate-400">Tx Hash:</p>
-              <p>{txHash}</p>
-
-              {isConfirming && (
-                <p className="text-yellow-400 mt-1">
-                  ⏳ Waiting for confirmation...
-                </p>
-              )}
-
-              {isSuccess && (
-                <p className="text-green-400 mt-1">
-                  ✅ Transaction Successful
-                </p>
-              )}
+            <div className="mt-4 text-xs text-gray-500 break-all">
+              <span className="font-semibold">
+                {isSuccess ? "Confirmed" : "Pending"}:
+              </span>{" "}
+              {txHash}
             </div>
           )}
         </div>
