@@ -2,13 +2,13 @@
 
 import { createAppKit } from '@reown/appkit/react'
 import { WagmiAdapter } from '@reown/appkit-adapter-wagmi'
-import { mainnet, arbitrum } from '@reown/appkit/networks'
+import { chainList } from './chainConfig'
 
 // 1. Get a project ID at https://cloud.reown.com
-export const projectId = 'YOUR_PROJECT_ID'
+export const projectId = '90973c606815134be36df5bbf2f4eb13'
 
 // 2. Set up the networks you want to support
-export const networks = [mainnet, arbitrum]
+export const networks = chainList
 
 // 3. Set up the Wagmi Adapter
 export const wagmiAdapter = new WagmiAdapter({
