@@ -41,7 +41,6 @@ export const chains = NETWORK_TYPE === 'mainnet' ?
         [chainTypes.BASE]: base
     }
     :
-    // ================= TESTNET (Fake Money) =================
     {
         [chainTypes.ETH]: sepolia,
         [chainTypes.BNB]: bscTestnet,
@@ -52,5 +51,4 @@ export const chains = NETWORK_TYPE === 'mainnet' ?
         [chainTypes.BASE]: baseSepolia
     };
 
-// 4. Export the list for AppKit
 export const chainList = Object.values(chains);

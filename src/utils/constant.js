@@ -1,1 +1,1 @@
-export const NETWORK_TYPE = 'mainnet'; 
+export const NETWORK_TYPE = 'testnet'; 
